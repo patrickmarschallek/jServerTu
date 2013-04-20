@@ -1,18 +1,10 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package server;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
-import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.List;
-import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -22,128 +14,191 @@ import java.util.logging.Logger;
  */
 public class Connection implements Runnable {
 
-    private int port = 2106;
-    private List<Byte> message;
-    private final static Logger LOGGER = Logger.getLogger(Connection.class.getName());
-    private int messageCounter;
-
-    public Connection() throws IOException {
-        this.messageCounter = 0;
-        LOGGER.addHandler(new FileHandler("error.log"));
-    }
+    private final static String PATTERN = "[A-Za-z0-9]{10,20}";
+    private final static String FAIL = "FAIL";
+    private final static String OK = "OK";
+    private int messageCount;
+    private Socket clientReceiveSocket;
+    private Socket clientSendSocket;
+    private String randomSalt;
 
     /**
-     *
-     * @param port
-     * @throws IOException
+     * 
+     * @param sender
+     * @param reciever 
      */
-    public Connection(int port) throws IOException {
-        this();
-        this.port = port;
+    public Connection(Socket sender, Socket reciever) {
+        this.clientReceiveSocket = reciever;
+        this.clientSendSocket = sender;
+        this.randomSalt = "";
     }
 
     /**
-     *
+     * 
      */
     @Override
     public void run() {
-        while (true) {
-            try {
-                ServerSocket serverSocket = new ServerSocket(this.port);
-                Socket client = waitForMessage(serverSocket);
+        BufferedReader in = null;
+        PrintWriter out = null;
+        try {
+            System.out.println("Client has connected");
+            in = new BufferedReader(new InputStreamReader(clientSendSocket.getInputStream()));
+            out = new PrintWriter(clientReceiveSocket.getOutputStream(), true);
 
-                initConnection();
-
-                String m = readMessage(client);
-                this.messageCounter++;
-                switch (this.messageCounter) {
-                    case 1:
-                        MessageHandler.processFirstMessage(Integer.parseInt(m));
-                        break;
-                    case 2:
-                        MessageHandler.processSecondMessage(m);
-                        break;
-                    default:
-                    //exit connection
-
+            while (true) {
+//                if (in.ready()) {
+                String message = in.readLine();
+                if ((message != null) && (message.length() != 0)) {
+                    this.messageCount++;
+                    if (message.equals("end")) {
+                        System.out.println("\nClient has initiated server shutdown");
+                        System.exit(0);
+                    } else {
+                        System.out.println("\nClient has send : " + message);
+                        message = this.handleMessage(message);
+                        out.println(message + "\n");
+                    }
                 }
-                System.out.println(m);
-                writeMessage(client, m);
+
+//                }
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ex);
+                }
+            }
+        } catch (Exception ex) {
+            Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ex);
+        } finally {
+            try {
+                if (out != null) {
+                    out.close();
+                    in.close();
+                    clientReceiveSocket.close();
+                    clientSendSocket.close();
+                }
             } catch (IOException ex) {
-                System.out.println("ERROR : " + ex.getCause());
-                LOGGER.log(Level.WARNING, null, ex);
+                Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
     }
 
     /**
      *
-     * @param serverSocket
+     * @param message
      * @return
-     * @throws IOException
      */
-    private Socket waitForMessage(ServerSocket serverSocket) throws IOException {
-        Socket socket = serverSocket.accept(); // blockiert, bis sich ein Client angemeldet hat
-        return socket;
-    }
-
-    /**
-     *
-     * @param socket
-     * @return
-     * @throws IOException
-     */
-    private Byte[] readByteMessage(Socket socket) throws IOException {
-        BufferedReader bufferedReader =
-                new BufferedReader(
-                new InputStreamReader(socket.getInputStream()));
-        int value;
-        while ((value = bufferedReader.read()) != -1) {
-            this.message.add((byte) value);
+    private String handleMessage(String message) {
+        String response = "";
+        switch (this.messageCount) {
+            case 1:
+                try {
+                    int value = Integer.parseInt(message);
+                    response += value + " " + generateRandomSalt();
+                } catch (NumberFormatException ex) {
+                    response = FAIL;
+                }
+                break;
+            case 2:
+                if (message.equals(this.changeStringCases(this.randomSalt))) {
+                    response = OK;
+                } else {
+                    response = FAIL;
+                }
+                break;
+            default:
+                break;
         }
-        return this.message.toArray(new Byte[this.message.size()]);
+        return response;
     }
 
     /**
      *
-     * @param socket
      * @return
-     * @throws IOException
      */
-    private String readMessage(Socket socket) throws IOException {
-        BufferedReader bufferedReader =
-                new BufferedReader(
-                new InputStreamReader(socket.getInputStream()));
-        char[] buffer = new char[200];
-        int anzahlZeichen = bufferedReader.read(buffer, 0, 200); // blockiert bis Nachricht empfangen
-        String m = new String(buffer, 0, anzahlZeichen);
-        return m;
+    private String generateRandomSalt() {
+        String salt = "";
+        int length = radnomCharacter(10, 20);
+        do {
+            for (int i = 0; i < length; i++) {
+                char character;
+                do {
+                    character = (char) radnomCharacter(48, 122);
+                } while (!validateLowerCharacter(character)
+                        && !validateUpperCharacter(character)
+                        && !validateNumberCharacter(character));
+                salt += character;
+            }
+        } while (salt.matches(PATTERN));
+        return salt;
     }
 
     /**
      *
-     * @param socket
-     * @param stringMessage
-     * @throws IOException
+     * @param character
+     * @return
      */
-    private void writeMessage(Socket socket, String stringMessage) throws IOException {
-        PrintWriter printWriter =
-                new PrintWriter(
-                new OutputStreamWriter(socket.getOutputStream()));
-        printWriter.print(stringMessage);
-        printWriter.flush();
+    private boolean validateNumberCharacter(char character) {
+        return (character >= 48 && character <= 57) ? true : false;
     }
 
     /**
      *
+     * @param character
+     * @return
      */
-    private void initConnection() {
-        try {
-            Thread connection = new Thread(new Connection(this.port));
-            connection.start();
-        } catch (Exception ex) {
-            System.out.println("ERROR : " + ex.getCause());
-            LOGGER.log(Level.WARNING, null, ex);
+    private boolean validateUpperCharacter(char character) {
+        return (character >= 65 && character <= 90) ? true : false;
+    }
+
+    /**
+     *
+     * @param character
+     * @return
+     */
+    private boolean validateLowerCharacter(char character) {
+        return (character >= 97 && character <= 122) ? true : false;
+    }
+
+    /**
+     *
+     * @param value
+     * @return
+     */
+    private String changeStringCases(String value) {
+        char[] chars = value.toCharArray();
+        for (int i = 0; i < chars.length; i++) {
+            char c = chars[i];
+            if (Character.isUpperCase(c)) {
+                chars[i] = Character.toLowerCase(c);
+            } else if (Character.isLowerCase(c)) {
+                chars[i] = Character.toUpperCase(c);
+            }
+        }
+        return new String(chars);
+    }
+
+    /**
+     *
+     * @param low
+     * @param high
+     * @return
+     */
+    public static int radnomCharacter(int low, int high) {
+        return (int) (Math.random() * (high - low) + low);
+    }
+
+    /**
+     *
+     * @param value
+     * @param pattern
+     * @return
+     */
+    public boolean validatePattern(String value, String pattern) {
+        if (value.matches(pattern)) {
+            return true;
+        } else {
+            return false;
         }
     }
 }

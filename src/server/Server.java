@@ -27,7 +27,6 @@ public class Server {
     }
 
     private void start() {
-
         try {
             sendSocket = new ServerSocket(4321);
             recieveSocket = new ServerSocket(1234);
@@ -36,67 +35,11 @@ public class Server {
                 Socket clientReceiveSocket = sendSocket.accept();
                 Socket clientSendSocket = recieveSocket.accept();
 
-                new Thread(new Handler(clientSendSocket, clientReceiveSocket)).start();
+                new Thread(new Connection(clientSendSocket, clientReceiveSocket)).start();
             }
         } catch (IOException ex) {
             Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ex);
         } finally {
-        }
-    }
-
-    private class Handler implements Runnable {
-
-        private Socket clientReceiveSocket;
-        private Socket clientSendSocket;
-
-        public Handler(Socket sender, Socket reciever) {
-            this.clientReceiveSocket = reciever;
-            this.clientSendSocket = sender;
-        }
-
-        @Override
-        public void run() {
-            BufferedReader in = null;
-            PrintWriter out = null;
-            try {
-                System.out.println("Client has connected");
-                in = new BufferedReader(new InputStreamReader(clientSendSocket.getInputStream()));
-                out = new PrintWriter(clientReceiveSocket.getOutputStream(), true);
-
-                while (true) {
-//                if (in.ready()) {
-                    String s = in.readLine();
-                    if ((s != null) && (s.length() != 0)) {
-                        if (s.equals("end")) {
-                            System.out.println("\nClient has initiated server shutdown");
-                            System.exit(0);
-                        } else {
-                            System.out.println("\nClient has send : " + s);
-                            out.println(s + "\n");
-                        }
-                    }
-
-//                }
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException ex) {
-                        Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ex);
-                    }
-                }
-            } catch (Exception ex) {
-                Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ex);
-            } finally {
-                try {
-                    if (out != null) {
-                        out.close();
-                        in.close();
-                        clientReceiveSocket.close();
-                        clientSendSocket.close();
-                    }
-                } catch (IOException ex) {
-                    Logger.getLogger(Server.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            }
         }
     }
 }
