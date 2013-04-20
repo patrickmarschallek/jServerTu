@@ -22,56 +22,65 @@ import java.util.logging.Logger;
  */
 public class Connection implements Runnable {
 
-    private int port;
+    private int port = 2106;
     private List<Byte> message;
     private final static Logger LOGGER = Logger.getLogger(Connection.class.getName());
     private int messageCounter;
 
-    /**
-     * 
-     * @param port
-     * @throws IOException 
-     */
-    public Connection(int port) throws IOException {
-        this.port = port;
+    public Connection() throws IOException {
         this.messageCounter = 0;
         LOGGER.addHandler(new FileHandler("error.log"));
     }
 
     /**
-     * 
+     *
+     * @param port
+     * @throws IOException
+     */
+    public Connection(int port) throws IOException {
+        this();
+        this.port = port;
+    }
+
+    /**
+     *
      */
     @Override
     public void run() {
-        try {
-            ServerSocket serverSocket = new ServerSocket(this.port);
-            Socket client = waitForMessage(serverSocket);
-            String m = readMessage(client);
-            this.messageCounter++;
-            switch(this.messageCounter){
-                case 1: 
-                    MessageHandler.processFirstMessage(Integer.parseInt(m));
-                    break;
-                case 2: 
-                    MessageHandler.processSecondMessage(m);
-                    break;
-                default:
+        while (true) {
+            try {
+                ServerSocket serverSocket = new ServerSocket(this.port);
+                Socket client = waitForMessage(serverSocket);
+
+                initConnection();
+
+                String m = readMessage(client);
+                this.messageCounter++;
+                switch (this.messageCounter) {
+                    case 1:
+                        MessageHandler.processFirstMessage(Integer.parseInt(m));
+                        break;
+                    case 2:
+                        MessageHandler.processSecondMessage(m);
+                        break;
+                    default:
                     //exit connection
-                    
+
+                }
+                System.out.println(m);
+                writeMessage(client, m);
+            } catch (IOException ex) {
+                System.out.println("ERROR : " + ex.getCause());
+                LOGGER.log(Level.WARNING, null, ex);
             }
-            System.out.println(m);
-            writeMessage(client, m);
-        } catch (IOException ex) {
-            System.out.println("ERROR : " + ex.getCause());
-            LOGGER.log(Level.WARNING, null, ex);
         }
     }
 
     /**
-     * 
+     *
      * @param serverSocket
      * @return
-     * @throws IOException 
+     * @throws IOException
      */
     private Socket waitForMessage(ServerSocket serverSocket) throws IOException {
         Socket socket = serverSocket.accept(); // blockiert, bis sich ein Client angemeldet hat
@@ -79,10 +88,10 @@ public class Connection implements Runnable {
     }
 
     /**
-     * 
+     *
      * @param socket
      * @return
-     * @throws IOException 
+     * @throws IOException
      */
     private Byte[] readByteMessage(Socket socket) throws IOException {
         BufferedReader bufferedReader =
@@ -96,10 +105,10 @@ public class Connection implements Runnable {
     }
 
     /**
-     * 
+     *
      * @param socket
      * @return
-     * @throws IOException 
+     * @throws IOException
      */
     private String readMessage(Socket socket) throws IOException {
         BufferedReader bufferedReader =
@@ -112,10 +121,10 @@ public class Connection implements Runnable {
     }
 
     /**
-     * 
+     *
      * @param socket
      * @param stringMessage
-     * @throws IOException 
+     * @throws IOException
      */
     private void writeMessage(Socket socket, String stringMessage) throws IOException {
         PrintWriter printWriter =
@@ -123,5 +132,18 @@ public class Connection implements Runnable {
                 new OutputStreamWriter(socket.getOutputStream()));
         printWriter.print(stringMessage);
         printWriter.flush();
+    }
+
+    /**
+     *
+     */
+    private void initConnection() {
+        try {
+            Thread connection = new Thread(new Connection(this.port));
+            connection.start();
+        } catch (Exception ex) {
+            System.out.println("ERROR : " + ex.getCause());
+            LOGGER.log(Level.WARNING, null, ex);
+        }
     }
 }
