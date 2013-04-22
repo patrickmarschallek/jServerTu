@@ -1,6 +1,8 @@
 package server;
 
 import java.io.BufferedReader;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -40,27 +42,46 @@ public class Connection implements Runnable {
     public void run() {
         BufferedReader in = null;
         PrintWriter out = null;
+        DataInputStream inData = null;
+        DataOutputStream outData = null;
         try {
             System.out.println("Client has connected");
             in = new BufferedReader(new InputStreamReader(clientSendSocket.getInputStream()));
             out = new PrintWriter(clientReceiveSocket.getOutputStream(), true);
+            inData = new DataInputStream(clientSendSocket.getInputStream());
+            outData = new DataOutputStream(clientReceiveSocket.getOutputStream());
 
             while (true) {
-//                if (in.ready()) {
-                String message = in.readLine();
-                if ((message != null) && (message.length() != 0)) {
-                    this.messageCount++;
-                    if (message.equals("end")) {
-                        System.out.println("\nClient has initiated server shutdown");
-                        System.exit(0);
-                    } else {
-                        System.out.println("\nClient has send : " + message);
-                        message = this.handleMessage(message);
-                        out.println(message + "\n");
-                    }
-                }
-
-//                }
+            	
+            	if(messageCount == 0){
+            		int value = inData.readInt();
+            		System.out.println("Received int: " + value);
+            		value++;
+            		this.randomSalt = generateRandomSalt();
+            		System.out.println("Sending int: " + value);
+            		outData.writeInt(value);
+            		outData.writeInt(randomSalt.length());
+            		System.out.println("Sending String: " + randomSalt);
+            		outData.writeBytes(randomSalt);
+            		
+            	} else if (messageCount == 1){
+            		String result = "";
+            		 byte b = inData.readByte();
+            		 while (b != 10){
+            			 result += (char)b;
+            			 b = inData.readByte();
+            		 }
+            		 System.out.println("result: " + result);
+            		 
+            		 if(result.equals(this.changeStringCases(this.randomSalt))){
+            			 System.out.println("OK");
+            			 outData.writeBytes("OK  ");
+            		 } else{
+            			 System.out.println("FAIL");
+            			 outData.writeBytes("FAIL");
+            		 }
+            	}
+            	messageCount++;
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException ex) {
@@ -74,6 +95,8 @@ public class Connection implements Runnable {
                 if (out != null) {
                     out.close();
                     in.close();
+                    outData.close();
+                    inData.close();
                     clientReceiveSocket.close();
                     clientSendSocket.close();
                 }
@@ -85,41 +108,12 @@ public class Connection implements Runnable {
 
     /**
      *
-     * @param message
-     * @return
-     */
-    private String handleMessage(String message) {
-        String response = "";
-        switch (this.messageCount) {
-            case 1:
-                try {
-                    int value = Integer.parseInt(message);
-                    response += value + " " + generateRandomSalt();
-                } catch (NumberFormatException ex) {
-                    response = FAIL;
-                }
-                break;
-            case 2:
-                if (message.equals(this.changeStringCases(this.randomSalt))) {
-                    response = OK;
-                } else {
-                    response = FAIL;
-                }
-                break;
-            default:
-                break;
-        }
-        return response;
-    }
-
-    /**
-     *
      * @return
      */
     private String generateRandomSalt() {
         String salt = "";
         int length = radnomCharacter(10, 20);
-        do {
+//        do {
             for (int i = 0; i < length; i++) {
                 char character;
                 do {
@@ -129,7 +123,7 @@ public class Connection implements Runnable {
                         && !validateNumberCharacter(character));
                 salt += character;
             }
-        } while (salt.matches(PATTERN));
+//        } while (salt.matches(PATTERN));
         return salt;
     }
 
