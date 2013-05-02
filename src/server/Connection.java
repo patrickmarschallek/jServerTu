@@ -1,14 +1,22 @@
 package server;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.chaosinmotion.asn1.BerInputStream;
+import com.chaosinmotion.asn1.BerOutputStream;
+
+import server.asn1.src.Message;
 
 /**
  *
@@ -23,6 +31,7 @@ public class Connection implements Runnable {
     private Socket clientReceiveSocket;
     private Socket clientSendSocket;
     private String randomSalt;
+    private Message message;
 
     /**
      * 
@@ -42,46 +51,64 @@ public class Connection implements Runnable {
     public void run() {
         BufferedReader in = null;
         PrintWriter out = null;
+        
         DataInputStream inData = null;
         DataOutputStream outData = null;
+        
         try {
             System.out.println("Client has connected");
+            
             in = new BufferedReader(new InputStreamReader(clientSendSocket.getInputStream()));
             out = new PrintWriter(clientReceiveSocket.getOutputStream(), true);
+            
             inData = new DataInputStream(clientSendSocket.getInputStream());
             outData = new DataOutputStream(clientReceiveSocket.getOutputStream());
-
-            while (true) {
-            	
-            	if(messageCount == 0){
-            		int value = inData.readInt();
+            
+            while (true) { 	
+            	//Not sure about the input stream right here!!!
+            	BerInputStream berInputStream = new BerInputStream(inData);
+            	message = new Message();
+            	message.decode(berInputStream);
+            	berInputStream.close();
+       
+            	if(message.msgType.getValue() == 0){
+            		ByteArrayOutputStream outStream = new ByteArrayOutputStream(); 
+                    BerOutputStream berOutData = new BerOutputStream(outStream, 0);
+            		int value = (int) message.number.getValue();
             		System.out.println("Received int: " + value);
             		value++;
             		this.randomSalt = generateRandomSalt();
-            		System.out.println("Sending int: " + value);
-            		outData.writeInt(value);
-            		outData.writeInt(randomSalt.length());
-            		System.out.println("Sending String: " + randomSalt);
-            		outData.writeBytes(randomSalt);
+            		System.out.println("Sending int: " + value + " and String: " + randomSalt);
+            		message.number.setValue(value);
+            		message.string.setValue(this.randomSalt);
+            		message.msgType.setTo_serverToClientAnswer_1();
+            		message.encode(berOutData);
+            		outData.write(outStream.toByteArray());
+            		berOutData.close();
+            		outStream.close();
             		
-            	} else if (messageCount == 1){
-            		String result = "";
-            		 byte b = inData.readByte();
-            		 while (b != 10){
-            			 result += (char)b;
-            			 b = inData.readByte();
-            		 }
+            	} else if (message.msgType.getValue() == 2){
+            		ByteArrayOutputStream outStream = new ByteArrayOutputStream(); 
+                    BerOutputStream berOutData = new BerOutputStream(outStream, 0);
+                    
+            		String result = message.string.getValue(); 
             		 System.out.println("result: " + result);
             		 
             		 if(result.equals(this.changeStringCases(this.randomSalt))){
             			 System.out.println("OK");
-            			 outData.writeBytes("OK  ");
+            			 message.string.setValue("OK");
             		 } else{
             			 System.out.println("FAIL");
-            			 outData.writeBytes("FAIL");
+            			 message.string.setValue("FAIL");
             		 }
+ 
+             		message.msgType.setTo_serverToClientResult_3();
+             		message.encode(berOutData);
+             		outData.write(outStream.toByteArray());
+             		berOutData.close();
+             		outStream.close();
+            		 
             	}
-            	messageCount++;
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException ex) {

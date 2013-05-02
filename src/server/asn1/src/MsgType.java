@@ -1,4 +1,4 @@
-package asn1.src;
+package server.asn1.src;
 
 /*
  * Created by JAC (Java Asn1 Compiler)
