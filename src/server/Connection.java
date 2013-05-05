@@ -69,7 +69,7 @@ public class Connection implements Runnable {
             	BerInputStream berInputStream = new BerInputStream(inData);
             	message = new Message();
             	message.decode(berInputStream);
-            	berInputStream.close();
+//            	berInputStream.close();
        
             	if(message.msgType.getValue() == 0){
             		ByteArrayOutputStream outStream = new ByteArrayOutputStream(); 
@@ -84,10 +84,12 @@ public class Connection implements Runnable {
             		message.msgType.setTo_serverToClientAnswer_1();
             		message.encode(berOutData);
             		outData.write(outStream.toByteArray());
-            		berOutData.close();
-            		outStream.close();
+            		System.out.println("String sent to client!");
+//            		berOutData.close();
+//            		outStream.close();
             		
             	} else if (message.msgType.getValue() == 2){
+            		System.out.println("Received converted string!");
             		ByteArrayOutputStream outStream = new ByteArrayOutputStream(); 
                     BerOutputStream berOutData = new BerOutputStream(outStream, 0);
                     
